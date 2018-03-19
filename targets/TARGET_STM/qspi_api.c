@@ -55,7 +55,8 @@ void qspi_prepare_command(const qspi_command_t *command, QSPI_CommandTypeDef *st
     }
 
     st_command->Instruction = command->instruction.value;
-    st_command->DummyCycles = command->dummy_count,
+    st_command->DummyCycles = command->dummy_count;
+    printf("DummyCycles %d\n", st_command->DummyCycles);
     // these are target specific settings, use default values
     st_command->SIOOMode = QSPI_SIOO_INST_EVERY_CMD;
     st_command->DdrMode = QSPI_DDR_MODE_DISABLE;
@@ -75,13 +76,15 @@ void qspi_prepare_command(const qspi_command_t *command, QSPI_CommandTypeDef *st
             st_command->AddressMode = QSPI_ADDRESS_NONE;
             break;
     }
-
+    printf("Address_Buswidth = %x\n", st_command->AddressMode);
     if (command->address.disabled == true) {
         st_command->AddressMode = QSPI_ADDRESS_NONE;
         st_command->AddressSize = 0;
     } else {
         st_command->Address = command->address.value;
-        st_command->AddressSize = command->address.size;
+        /* command->address.size needs to be shifted by QUADSPI_CCR_ADSIZE_Pos */
+        st_command->AddressSize = (command->address.size << QUADSPI_CCR_ADSIZE_Pos) & QUADSPI_CCR_ADSIZE_Msk;
+        printf("AdressSize = %x\n", st_command->AddressSize);
     }
 
     switch (command->alt.bus_width) {
@@ -104,7 +107,10 @@ void qspi_prepare_command(const qspi_command_t *command, QSPI_CommandTypeDef *st
         st_command->AlternateBytesSize = 0;
     } else {
         st_command->AlternateBytes = command->alt.value;
+        /* command->AlternateBytesSize needs to be shifted by QUADSPI_CCR_ABSIZE_Pos */
+        st_command->AlternateBytesSize = (command->alt.size << QUADSPI_CCR_ABSIZE_Pos) & QUADSPI_CCR_ABSIZE_Msk;
         st_command->AlternateBytesSize = command->alt.size;
+        printf("AtlByteSize = %x\n", st_command->AlternateBytesSize);
     }
 
     switch (command->data.bus_width) {
@@ -255,10 +261,13 @@ qspi_status_t qspi_command_transfer(qspi_t *obj, const qspi_command_t *command, 
 
     if ((tx_data == NULL || tx_size == 0) && (rx_data == NULL || rx_size == 0)) {
         // only command, no rx or tx
+        printf("Send a command\n");
         QSPI_CommandTypeDef st_command;
         qspi_prepare_command(command, &st_command);
 
         st_command.NbData = 1;
+        st_command.DataMode = QSPI_DATA_NONE; /* Instruction only */ 
+        printf("call HAL_QSPI_Command\n");
         if (HAL_QSPI_Command(&obj->handle, &st_command, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
             status = QSPI_STATUS_ERROR;
             return status;
@@ -266,6 +275,7 @@ qspi_status_t qspi_command_transfer(qspi_t *obj, const qspi_command_t *command, 
     } else {
         // often just read a register, check if we need to transmit anything prior reading
         if (tx_data != NULL && tx_size) {
+            printf("call qspi write\n");
             size_t tx_length = tx_size;
             status = qspi_write(obj, command, tx_data, &tx_length);
             if (status != QSPI_STATUS_OK) {
@@ -274,6 +284,7 @@ qspi_status_t qspi_command_transfer(qspi_t *obj, const qspi_command_t *command, 
         }
 
         if (rx_data != NULL && rx_size) {
+            printf("call qspi read\n");
             size_t rx_length = rx_size;
             status = qspi_read(obj, command, rx_data, &rx_length);
         }
