@@ -35,6 +35,7 @@
 #include "PeripheralPins.h"
 
 #define QSPI_FLASH_SIZE_DEFAULT 32
+#define QSPI_FLASH_SIZE_DEFAULT 0x800000
 
 void qspi_prepare_command(const qspi_command_t *command, QSPI_CommandTypeDef *st_command) 
 {
